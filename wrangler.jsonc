@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "slatepress-org",
+  "compatibility_date": "2026-06-13",
+  "pages_build_output_dir": "."
+}
