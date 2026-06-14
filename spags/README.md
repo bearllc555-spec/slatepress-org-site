@@ -141,6 +141,7 @@ POST /api/jobs
 
 ```
 spags/
+  version.js          ← bump on each dashboard iteration (shown in header)
   src/
     index.ts          Worker entry
     routes.ts         HTTP handlers

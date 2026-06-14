@@ -2,6 +2,7 @@ export interface Env {
   BROWSER: Fetcher;
   APP_NAME: string;
   APP_FULL_NAME: string;
+  APP_VERSION: string;
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   SCRAPE_API_KEY?: string;

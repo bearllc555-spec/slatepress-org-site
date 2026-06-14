@@ -81,7 +81,7 @@ export async function handleRequest(
     return json({
       name: env.APP_FULL_NAME,
       code: env.APP_NAME,
-      version: "0.1.0",
+      version: env.APP_VERSION,
       endpoints: {
         create_job: "POST /api/jobs",
         list_jobs: "GET /api/jobs",

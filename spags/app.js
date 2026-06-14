@@ -1,4 +1,7 @@
 const { supabaseUrl, supabaseAnonKey } = window.SPAGS_CONFIG;
+const appVersion = window.SPAGS_VERSION ?? "v1.0";
+
+document.getElementById("app-version").textContent = appVersion;
 
 const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
 

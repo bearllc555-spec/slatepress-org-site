@@ -9,6 +9,7 @@
   },
   "vars": {
     "APP_NAME": "SPAGS",
-    "APP_FULL_NAME": "Slate Press A Google Scrape"
+    "APP_FULL_NAME": "Slate Press A Google Scrape",
+    "APP_VERSION": "v1.0"
   }
 }
