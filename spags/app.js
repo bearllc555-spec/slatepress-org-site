@@ -29,6 +29,7 @@ function formatDate(value) {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "America/New_York",
   }).format(new Date(value));
 }
 

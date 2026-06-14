@@ -2,6 +2,7 @@ import { launch, type Browser, type Page } from "@cloudflare/playwright";
 import type { ScrapedPlace } from "../types";
 
 const MAPS_HOST = "https://www.google.com";
+const TIMEZONE = "America/New_York";
 const IGNORED_EMAILS = new Set([
   "example.com",
   "sentry.io",
@@ -28,6 +29,20 @@ function buildSearchUrl(query: string, lang: string): string {
 
 function normalizePlaceUrl(url: string): string {
   return url.replace(/\/data=.*$/i, "").split("?")[0];
+}
+
+function easternTimestamp(): string {
+  return new Date().toLocaleString("en-US", {
+    timeZone: TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZoneName: "short",
+  });
 }
 
 function pickEmail(candidates: string[]): string | null {
@@ -74,13 +89,20 @@ async function scrollResultsFeed(page: Page, depth: number): Promise<void> {
 async function extractPlacesFromFeed(page: Page): Promise<PlaceSummary[]> {
   return page.evaluate(() => {
     const parseRating = (text: string): number | null => {
-      const match = text.match(/(\d+(?:\.\d+)?)/);
-      return match ? Number(match[1]) : null;
+      const decimal = text.match(/(\d+\.\d+)/);
+      if (decimal) return Number(decimal[1]);
+      const whole = text.match(/^(\d+(?:\.\d+)?)/);
+      return whole ? Number(whole[1]) : null;
     };
 
     const parseReviewCount = (text: string): number | null => {
-      const match = text.replace(/,/g, "").match(/(\d+)/);
-      return match ? Number(match[1]) : null;
+      const paren = text.match(/\(([\d,]+)\)/);
+      if (paren) return Number(paren[1].replace(/,/g, ""));
+
+      const labeled = text.match(/([\d,]+)\s+reviews?\b/i);
+      if (labeled) return Number(labeled[1].replace(/,/g, ""));
+
+      return null;
     };
 
     const seen = new Set<string>();
@@ -110,10 +132,13 @@ async function extractPlacesFromFeed(page: Page): Promise<PlaceSummary[]> {
       const address =
         textParts.find((part) => /\d/.test(part) && part.length > 8) ?? textParts[2] ?? null;
 
-      const ratingText =
-        textParts.find((part) => part.includes("(") || /\d\.\d/.test(part)) ?? "";
-      const rating = parseRating(ratingText);
-      const review_count = parseReviewCount(ratingText);
+      const ratingLine =
+        textParts.find((part) => /\(\s*[\d,]+\s*\)/.test(part) || /\d\.\d/.test(part)) ?? "";
+      const rating = parseRating(ratingLine);
+      const reviewLine =
+        textParts.find((part) => /\(\s*[\d,]+\s*\)/.test(part) || /reviews?\b/i.test(part)) ??
+        ratingLine;
+      const review_count = parseReviewCount(reviewLine);
 
       let latitude: number | null = null;
       let longitude: number | null = null;
@@ -151,6 +176,8 @@ async function extractDetailPanel(page: Page): Promise<{
   phone: string | null;
   website: string | null;
   email: string | null;
+  rating: number | null;
+  review_count: number | null;
 }> {
   await page
     .locator('button[data-item-id="address"], h1')
@@ -162,6 +189,24 @@ async function extractDetailPanel(page: Page): Promise<{
     const aria = (selector: string) => {
       const el = document.querySelector(selector);
       return el?.getAttribute("aria-label") ?? null;
+    };
+
+    const parseReviewCount = (text: string): number | null => {
+      const paren = text.match(/\(([\d,]+)\)/);
+      if (paren) return Number(paren[1].replace(/,/g, ""));
+
+      const labeled = text.match(/([\d,]+)\s+reviews?\b/i);
+      if (labeled) return Number(labeled[1].replace(/,/g, ""));
+
+      return null;
+    };
+
+    const parseRating = (text: string): number | null => {
+      const decimal = text.match(/(\d+\.\d+)/);
+      if (decimal) return Number(decimal[1]);
+      const stars = text.match(/([\d.]+)\s*stars?/i);
+      if (stars) return Number(stars[1]);
+      return null;
     };
 
     const addressLabel = aria('button[data-item-id="address"]');
@@ -189,7 +234,36 @@ async function extractDetailPanel(page: Page): Promise<{
     const mailto = document.querySelector('a[href^="mailto:"]') as HTMLAnchorElement | null;
     const email = mailto?.href.replace(/^mailto:/i, "").split("?")[0] ?? null;
 
-    return { address, phone, website, email };
+    let rating: number | null = null;
+    let review_count: number | null = null;
+
+    const starNode = document.querySelector('[role="img"][aria-label*="stars"]');
+    if (starNode) {
+      rating = parseRating(starNode.getAttribute("aria-label") ?? "");
+    }
+
+    const ratingBlock = document.querySelector(".F7nice");
+    if (ratingBlock) {
+      const blockText = ratingBlock.textContent ?? "";
+      rating = rating ?? parseRating(blockText);
+      review_count = review_count ?? parseReviewCount(blockText);
+    }
+
+    const reviewCandidates = [
+      ...Array.from(document.querySelectorAll('button[aria-label*="review"], a[href*="review"]')),
+      ...Array.from(document.querySelectorAll("[aria-label]")),
+    ];
+
+    for (const node of reviewCandidates) {
+      const label = node.getAttribute("aria-label") ?? node.textContent ?? "";
+      const count = parseReviewCount(label);
+      if (count != null) {
+        review_count = count;
+        break;
+      }
+    }
+
+    return { address, phone, website, email, rating, review_count };
   });
 }
 
@@ -230,6 +304,8 @@ async function enrichPlace(page: Page, place: PlaceSummary, searchUrl: string): 
   place.phone = details.phone;
   place.website = details.website;
   place.email = details.email;
+  place.rating = details.rating ?? place.rating;
+  place.review_count = details.review_count ?? place.review_count;
 
   if (place.website && !place.email) {
     place.email = await extractEmailFromWebsite(page, place.website);
@@ -239,7 +315,8 @@ async function enrichPlace(page: Page, place: PlaceSummary, searchUrl: string): 
   place.raw = {
     ...place.raw,
     detail: details,
-    enriched_at: new Date().toISOString(),
+    enriched_at: easternTimestamp(),
+    timezone: TIMEZONE,
   };
 
   return place;
@@ -259,6 +336,8 @@ export async function scrapeGoogleMaps(
     browser = await launch(browserBinding);
     const page = await browser.newPage({
       viewport: { width: 1280, height: 900 },
+      timezoneId: TIMEZONE,
+      locale: "en-US",
       userAgent:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     });
