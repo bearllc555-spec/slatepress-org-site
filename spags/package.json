@@ -1,0 +1,20 @@
+{
+  "name": "spags",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Slate Press A Google Scrape — Browser Run + Supabase maps scraper",
+  "scripts": {
+    "dev": "wrangler dev --remote",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/playwright": "^1.0.0",
+    "@supabase/supabase-js": "^2.49.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250317.0",
+    "typescript": "^5.8.0",
+    "wrangler": "^4.100.0"
+  }
+}

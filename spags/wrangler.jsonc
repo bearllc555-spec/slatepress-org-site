@@ -1,0 +1,14 @@
+{
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "spags",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "browser": {
+    "binding": "BROWSER"
+  },
+  "vars": {
+    "APP_NAME": "SPAGS",
+    "APP_FULL_NAME": "Slate Press A Google Scrape"
+  }
+}

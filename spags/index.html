@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SPAGS — Slate Press A Google Scrape</title>
+  <meta name="description" content="Google Maps scrape dashboard for SlatePress">
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/spags/styles.css">
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span>SLATE</span><span class="slash">\</span><span>PRESS</span>
+      </a>
+      <div class="topbar-meta">
+        <span class="badge">SPAGS</span>
+        <span class="subtitle">Slate Press A Google Scrape</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Maps intelligence</p>
+        <h1>Scrape dashboard</h1>
+        <p class="lede">Live results from your Google Maps collection runs.</p>
+      </div>
+      <button class="btn btn-primary" id="refresh-btn" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+        Refresh
+      </button>
+    </section>
+
+    <section class="stats" id="stats" aria-label="Summary statistics">
+      <article class="stat-card">
+        <p class="stat-label">Total jobs</p>
+        <p class="stat-value" data-stat="jobs">—</p>
+      </article>
+      <article class="stat-card">
+        <p class="stat-label">Completed</p>
+        <p class="stat-value" data-stat="completed">—</p>
+      </article>
+      <article class="stat-card accent">
+        <p class="stat-label">Places collected</p>
+        <p class="stat-value" data-stat="places">—</p>
+      </article>
+      <article class="stat-card">
+        <p class="stat-label">Latest scrape</p>
+        <p class="stat-value stat-small" data-stat="latest">—</p>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Recent jobs</h2>
+          <p class="panel-copy">Search queries and run status</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" id="jobs-table">
+          <thead>
+            <tr>
+              <th>Query</th>
+              <th>Status</th>
+              <th>Places</th>
+              <th>Depth</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody id="jobs-body">
+            <tr><td colspan="5" class="empty">Loading jobs…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Places</h2>
+          <p class="panel-copy" id="places-filter-label">All collected listings</p>
+        </div>
+        <div class="panel-actions">
+          <input class="search" id="places-search" type="search" placeholder="Search places…" autocomplete="off">
+          <button class="btn btn-ghost" id="clear-filter-btn" type="button" hidden>Clear filter</button>
+        </div>
+      </div>
+      <div class="places-grid" id="places-grid">
+        <div class="empty-state">Loading places…</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>SPAGS · Password protection coming soon</p>
+  </footer>
+
+  <script src="/spags/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/spags/app.js" type="module"></script>
+</body>
+</html>
