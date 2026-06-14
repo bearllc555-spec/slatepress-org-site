@@ -1,5 +1,6 @@
-const { supabaseUrl, supabaseAnonKey } = window.SPAGS_CONFIG;
+const { supabaseUrl, supabaseAnonKey, workerApiUrl } = window.SPAGS_CONFIG;
 const appVersion = window.SPAGS_VERSION ?? "v1.0";
+const STALE_JOB_MS = 20 * 60 * 1000;
 
 document.getElementById("app-version").textContent = appVersion;
 
@@ -10,6 +11,8 @@ const state = {
   places: [],
   selectedJobId: null,
   search: "",
+  healthByJob: {},
+  pollTimer: null,
 };
 
 const els = {
@@ -25,6 +28,13 @@ const els = {
   placesSearch: document.getElementById("places-search"),
   clearFilterBtn: document.getElementById("clear-filter-btn"),
   refreshBtn: document.getElementById("refresh-btn"),
+  quarryForm: document.getElementById("quarry-form"),
+  quarryQuery: document.getElementById("quarry-query"),
+  quarryDepth: document.getElementById("quarry-depth"),
+  quarryLang: document.getElementById("quarry-lang"),
+  quarrySubmit: document.getElementById("quarry-submit"),
+  quarryFeedback: document.getElementById("quarry-feedback"),
+  healthBanner: document.getElementById("health-banner"),
 };
 
 function formatDate(value) {
@@ -36,8 +46,20 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
-function statusClass(status) {
-  return `status status-${status}`;
+function runningForMs(job) {
+  const started = job.started_at ?? job.created_at;
+  return Date.now() - new Date(started).getTime();
+}
+
+function isJobStale(job) {
+  return job.status === "running" && runningForMs(job) > STALE_JOB_MS;
+}
+
+function displayStatus(job) {
+  if (job.status === "running" && isJobStale(job)) {
+    return { label: "stale", className: "status status-stale" };
+  }
+  return { label: job.status, className: `status status-${job.status}` };
 }
 
 function renderStats() {
@@ -54,21 +76,25 @@ function renderStats() {
 
 function renderJobs() {
   if (state.jobs.length === 0) {
-    els.jobsBody.innerHTML = `<tr><td colspan="5" class="empty">No jobs yet. Run a scrape via the SPAGS API.</td></tr>`;
+    els.jobsBody.innerHTML = `<tr><td colspan="6" class="empty">No quarries yet. Submit one above.</td></tr>`;
     return;
   }
 
   els.jobsBody.innerHTML = state.jobs
-    .map(
-      (job) => `
+    .map((job) => {
+      const status = displayStatus(job);
+      return `
       <tr data-job-id="${job.id}" class="${state.selectedJobId === job.id ? "active" : ""}">
         <td class="query-cell">${escapeHtml(job.query)}</td>
-        <td><span class="${statusClass(job.status)}">${escapeHtml(job.status)}</span></td>
+        <td><span class="${status.className}">${escapeHtml(status.label)}</span></td>
         <td>${job.places_found ?? 0}</td>
         <td>${job.depth}</td>
         <td>${formatDate(job.created_at)}</td>
-      </tr>`,
-    )
+        <td class="actions-cell">
+          <button class="btn btn-ghost btn-small check-job-btn" type="button" data-job-id="${job.id}">Check</button>
+        </td>
+      </tr>`;
+    })
     .join("");
 
   els.jobsBody.querySelectorAll("tr[data-job-id]").forEach((row) => {
@@ -78,6 +104,13 @@ function renderJobs() {
       updateFilterUi();
       renderJobs();
       renderPlaces();
+    });
+  });
+
+  els.jobsBody.querySelectorAll(".check-job-btn").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      checkQuarry(button.dataset.jobId, true, false).catch(showError);
     });
   });
 }
@@ -168,12 +201,28 @@ function updateFilterUi() {
     const job = state.jobs.find((item) => item.id === state.selectedJobId);
     els.placesFilterLabel.textContent = job
       ? `Filtered to “${job.query}”`
-      : "Filtered by job";
+      : "Filtered by quarry";
     els.clearFilterBtn.hidden = false;
   } else {
     els.placesFilterLabel.textContent = "All collected listings";
     els.clearFilterBtn.hidden = true;
   }
+}
+
+function showHealthBanner(message, tone = "info") {
+  els.healthBanner.hidden = false;
+  els.healthBanner.className = `health-banner health-banner-${tone}`;
+  els.healthBanner.textContent = message;
+}
+
+function hideHealthBanner() {
+  els.healthBanner.hidden = true;
+}
+
+function showQuarryFeedback(message, tone = "info") {
+  els.quarryFeedback.hidden = false;
+  els.quarryFeedback.className = `form-feedback form-feedback-${tone}`;
+  els.quarryFeedback.textContent = message;
 }
 
 function escapeHtml(value) {
@@ -188,7 +237,96 @@ function escapeAttr(value) {
   return escapeHtml(value).replaceAll("'", "&#39;");
 }
 
-async function loadData() {
+async function checkQuarry(jobId, reconcile = true, silent = false) {
+  const response = await fetch(`${workerApiUrl}/api/jobs/${jobId}/check`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reconcile }),
+  });
+
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error ?? "Could not check quarry status");
+  }
+
+  state.healthByJob[jobId] = payload.health;
+
+  if (!silent || payload.health.reconciled || payload.health.is_stale) {
+    showHealthBanner(
+      payload.health.message,
+      payload.health.is_stale || payload.health.reconciled ? "warn" : "info",
+    );
+  }
+
+  await loadData({ skipPollRestart: true });
+  return payload;
+}
+
+async function submitQuarry(event) {
+  event.preventDefault();
+
+  const query = els.quarryQuery.value.trim();
+  const depth = Number(els.quarryDepth.value) || 1;
+  const lang = els.quarryLang.value.trim() || "en";
+
+  if (!query) return;
+
+  els.quarrySubmit.disabled = true;
+  showQuarryFeedback("Starting quarry…", "info");
+
+  try {
+    const response = await fetch(`${workerApiUrl}/api/jobs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, depth, lang }),
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Could not start quarry");
+    }
+
+    state.selectedJobId = payload.job.id;
+    showQuarryFeedback(`Quarry started. Tracking “${query}”.`, "success");
+    hideHealthBanner();
+    await loadData();
+    startPolling();
+  } catch (error) {
+    showQuarryFeedback(error.message, "error");
+  } finally {
+    els.quarrySubmit.disabled = false;
+  }
+}
+
+async function reconcileRunningQuarries() {
+  const running = state.jobs.filter((job) => job.status === "running" && isJobStale(job));
+  for (const job of running) {
+    await checkQuarry(job.id, true, true);
+  }
+}
+
+function startPolling() {
+  clearInterval(state.pollTimer);
+
+  const hasActive = state.jobs.some(
+    (job) => job.status === "running" || job.status === "pending",
+  );
+  if (!hasActive) return;
+
+  state.pollTimer = setInterval(async () => {
+    await loadData({ skipPollRestart: true });
+    const stillActive = state.jobs.some(
+      (job) => job.status === "running" || job.status === "pending",
+    );
+    if (!stillActive) {
+      clearInterval(state.pollTimer);
+      return;
+    }
+    await reconcileRunningQuarries();
+  }, 12000);
+}
+
+async function loadData(options = {}) {
   els.refreshBtn.disabled = true;
 
   const [{ data: jobs, error: jobsError }, { data: places, error: placesError }] =
@@ -207,10 +345,17 @@ async function loadData() {
   renderJobs();
   renderPlaces();
   els.refreshBtn.disabled = false;
+  if (!options.skipPollRestart) {
+    startPolling();
+  }
 }
 
 els.refreshBtn.addEventListener("click", () => {
   loadData().catch(showError);
+});
+
+els.quarryForm.addEventListener("submit", (event) => {
+  submitQuarry(event).catch(showError);
 });
 
 els.placesSearch.addEventListener("input", (event) => {
@@ -227,8 +372,9 @@ els.clearFilterBtn.addEventListener("click", () => {
 
 function showError(error) {
   console.error(error);
-  els.placesGrid.innerHTML = `<div class="empty-state">Could not load data. Check Supabase connection.</div>`;
+  showHealthBanner(error.message ?? "Something went wrong.", "error");
   els.refreshBtn.disabled = false;
+  els.quarrySubmit.disabled = false;
 }
 
 updateFilterUi();

@@ -1,3 +1,4 @@
+import { checkJobHealth } from "./jobHealth";
 import {
   createJob,
   createSupabase,
@@ -86,6 +87,7 @@ export async function handleRequest(
         create_job: "POST /api/jobs",
         list_jobs: "GET /api/jobs",
         get_job: "GET /api/jobs/:id",
+        check_job: "POST /api/jobs/:id/check",
       },
     });
   }
@@ -136,6 +138,28 @@ export async function handleRequest(
 
     const places = await getPlacesForJob(supabase, jobId);
     return json({ job, places });
+  }
+
+  const checkMatch = url.pathname.match(/^\/api\/jobs\/([0-9a-f-]{36})\/check$/i);
+  if (checkMatch && request.method === "POST") {
+    const jobId = checkMatch[1];
+    let reconcile = true;
+
+    try {
+      const body = await request.json();
+      if (body && typeof body === "object" && "reconcile" in body) {
+        reconcile = Boolean((body as Record<string, unknown>).reconcile);
+      }
+    } catch {
+      reconcile = true;
+    }
+
+    try {
+      const result = await checkJobHealth(env, jobId, reconcile);
+      return json(result);
+    } catch (err) {
+      return error(err instanceof Error ? err.message : "Check failed", 404);
+    }
   }
 
   return error("Not found", 404);
