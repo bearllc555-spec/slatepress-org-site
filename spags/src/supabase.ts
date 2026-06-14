@@ -114,6 +114,7 @@ export async function insertPlaces(
     address: place.address,
     phone: place.phone,
     website: place.website,
+    email: place.email,
     rating: place.rating,
     review_count: place.review_count,
     latitude: place.latitude,

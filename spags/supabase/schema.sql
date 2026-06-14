@@ -25,6 +25,7 @@ create table if not exists places (
   address text,
   phone text,
   website text,
+  email text,
   rating numeric(3, 2),
   review_count int,
   latitude double precision,

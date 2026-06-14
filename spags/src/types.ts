@@ -30,6 +30,7 @@ export interface PlaceRow {
   address: string | null;
   phone: string | null;
   website: string | null;
+  email: string | null;
   rating: number | null;
   review_count: number | null;
   latitude: number | null;
@@ -45,6 +46,7 @@ export interface ScrapedPlace {
   address: string | null;
   phone: string | null;
   website: string | null;
+  email: string | null;
   rating: number | null;
   review_count: number | null;
   latitude: number | null;

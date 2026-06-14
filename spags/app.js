@@ -89,12 +89,32 @@ function filteredPlaces() {
   if (!q) return places;
 
   return places.filter((place) => {
-    const haystack = [place.title, place.category, place.address, place.maps_url]
+    const haystack = [
+      place.title,
+      place.category,
+      place.address,
+      place.phone,
+      place.email,
+      place.website,
+      place.maps_url,
+    ]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
     return haystack.includes(q);
   });
+}
+
+function contactRow(label, value, href = null) {
+  if (!value) {
+    return `<div class="contact-row contact-row-empty"><span class="contact-label">${label}</span><span class="contact-value muted">Not found</span></div>`;
+  }
+
+  const content = href
+    ? `<a href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(value)}</a>`
+    : escapeHtml(value);
+
+  return `<div class="contact-row"><span class="contact-label">${label}</span><span class="contact-value">${content}</span></div>`;
 }
 
 function renderPlaces() {
@@ -119,11 +139,20 @@ function renderPlaces() {
         ? `<span class="chip">${escapeHtml(place.category)}</span>`
         : "";
 
+      const websiteDisplay = place.website
+        ? place.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")
+        : null;
+
       return `
         <article class="place-card">
           <h3>${escapeHtml(place.title || "Untitled place")}</h3>
           <div class="place-meta">${rating}${reviews}${category}</div>
-          ${place.address ? `<p class="place-address">${escapeHtml(place.address)}</p>` : ""}
+          <div class="contact-list">
+            ${contactRow("Address", place.address)}
+            ${contactRow("Phone", place.phone, place.phone ? `tel:${place.phone.replace(/\s+/g, "")}` : null)}
+            ${contactRow("Email", place.email, place.email ? `mailto:${place.email}` : null)}
+            ${contactRow("Website", websiteDisplay, place.website)}
+          </div>
           <a class="place-link" href="${escapeAttr(place.maps_url)}" target="_blank" rel="noopener noreferrer">Open in Google Maps →</a>
         </article>`;
     })
